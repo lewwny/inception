@@ -1,3 +1,5 @@
+#!/bin/sh
+
 sleep 10
 
 if [ ! -f /var/www/html/wp-config.php ]; then
@@ -20,3 +22,21 @@ if [ ! -f /var/www/html/wp-config.php ]; then
 		--role=author \
 		--path='/var/www/wordpress'
 fi
+
+# ... ton auto-config (wp-cli) ...
+
+# garder le conteneur vivant : php-fpm en avant-plan
+# détecter le bon binaire selon la version installée
+if command -v php-fpm8.2 >/dev/null 2>&1; then
+  exec /usr/sbin/php-fpm8.2 -F
+elif command -v php-fpm8.1 >/dev/null 2>&1; then
+  exec /usr/sbin/php-fpm8.1 -F
+elif command -v php-fpm7.4 >/dev/null 2>&1; then
+  exec /usr/sbin/php-fpm7.4 -F
+elif command -v php-fpm7.3 >/dev/null 2>&1; then
+  exec /usr/sbin/php-fpm7.3 -F
+else
+  echo "php-fpm introuvable. Installe php-fpm (et php-mysql)." >&2
+  exit 1
+fi
+
