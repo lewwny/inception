@@ -1,71 +1,64 @@
-version: "3.5"
-
-volumes:
-  wordpress:
-    name: wordpress
-    driver: local
-    driver_opts:
-      device: /home/lengarci/inception/srcs/wordpress
-      o: bind
-      type: none
-  mariadb:
-    name: mariadb
-    driver: local
-    driver_opts:
-      device: /home/lengarci/inception/srcs/mariadb
-      o: bind
-      type: none
-
-networks:
-  inception:
-    name: inception
+version: "3"
 
 services:
   mariadb:
     container_name: mariadb
-    build: ./requirements/mariadb/.
-    image: mariadb:42
+    networks:
+      - inception
+    build:
+      context: requirements/mariadb
+      dockerfile: Dockerfile
+      env_file: .env
     volumes:
       - mariadb:/var/lib/mysql
-    env_file:
-      - .env
-    networks:
-      - inception
-    restart: always
-    healthcheck:
-      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -p$MARIADB_ROOT_PASSWORD --silent || exit 1"]
-      interval: 5s
-      timeout: 3s
-      retries: 30
-
-  wordpress:
-    container_name: wordpress
-    build: ./requirements/wordpress/.
-    image: wordpress:42
-    depends_on:
-      mariadb:
-        condition: service_healthy
-    volumes:
-      - wordpress:/var/www/html
-    env_file:
-      - .env
-    networks:
-      - inception
-    restart: always
-
+    restart: on-failure
+    expose:
+      - "3306"
   nginx:
     container_name: nginx
-    build: ./requirements/nginx/.
-    image: nginx:42
-    ports:
-      - "443:443"
-    depends_on:
-      - wordpress
     volumes:
-      - wordpress:/var/www/html
+      - wordpress:/var/www/wordpress
     networks:
       - inception
-    env_file:
-      - .env
-    restart: always
+    depends_on:
+      - wordpress
+    build:
+      context: requirements/nginx
+      dockerfile: Dockerfile
+      env_file: .env
+    ports:
+      - "443:443"
+    restart: on-failure
+  wordpress:
+    container_name: wordpress
+    env_file: .env
+    volumes:
+      - wordpress:/var/www/wordpress
+    networks:
+      - inception
+    build:
+      context: requirements/wordpress
+      dockerfile: Dockerfile
+    depends_on:
+      - mariadb
+    restart: on-failure
+    expose:
+      - "9000"
 
+volumes:
+  wordpress:
+    driver: local
+    driver_opts:
+      type: none
+      device: /home/lengarci/data/wordpress
+      o: bind
+  mariadb:
+    driver: local
+    driver_opts:
+      type: none
+      device: /home/lengarci/data/mariadb
+      o: bind
+
+networks:
+  inception:
+    driver: bridge

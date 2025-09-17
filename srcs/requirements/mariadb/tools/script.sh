@@ -1,64 +1,15 @@
-#!/bin/bash
-set -euo pipefail
+service mysql start;
 
-# Vars attendues : db1_name, db1_user, db1_pwd
-: "${db1_name:?Missing db1_name}"
-: "${db1_user:?Missing db1_user}"
-: "${db1_pwd:?Missing db1_pwd}"
+mysql -e "CREATE DATABASE IF NOT EXISTS \`${SQL_DATABASE}\`;"
 
-# 1) Préparer les répertoires requis
-mkdir -p /run/mysqld /var/log/mysql
-chown -R mysql:mysql /run/mysqld /var/log/mysql
-chmod 775 /run/mysqld
+mysql -e "CREATE USER IF NOT EXISTS \`${SQL_USER}\`@'localhost' IDENTIFIED BY '${SQL_PASSWORD}';"
 
-# 2) Si le datadir est vide, initialiser (utile si tu ne relies pas un volume déjà peuplé)
-if [ -z "$(ls -A /var/lib/mysql || true)" ]; then
-  echo "Initializing database..."
-  mariadb-install-db --user=mysql --datadir=/var/lib/mysql > /dev/null
-fi
+mysql -e "GRANT ALL PRIVILEGES ON \`${SQL_DATABASE}\`.* TO \`${SQL_USER}\`@'%' IDENTIFIED BY '${SQL_PASSWORD}';"
 
-# 3) Démarrage temporaire en background pour config initiale
-echo "Starting MariaDB (bootstrap)..."
-mysqld --user=mysql --datadir=/var/lib/mysql \
-       --pid-file=/run/mysqld/mysqld.pid \
-       --socket=/run/mysqld/mysqld.sock \
-       --bind-address=0.0.0.0 \
-       --log-error=/var/log/mysql/error.log &
-BOOT_PID=$!
+mysql -e "ALTER USER 'root'@'localhost' IDENTIFIED BY '${SQL_ROOT_PASSWORD}';"
 
-# 4) Attendre que ça réponde
-echo -n "Waiting for MariaDB to be ready"
-for i in {1..60}; do
-  if mysqladmin ping --socket=/run/mysqld/mysqld.sock --silent; then
-    echo " - ready."
-    break
-  fi
-  echo -n "."
-  sleep 1
-done
+mysql -e "FLUSH PRIVILEGES;"
 
-# 5) Configuration initiale (DB, user, root password)
-cat > /tmp/db1.sql <<SQL
-CREATE DATABASE IF NOT EXISTS \`${db1_name}\`;
-CREATE USER IF NOT EXISTS '${db1_user}'@'%' IDENTIFIED BY '${db1_pwd}';
-GRANT ALL PRIVILEGES ON \`${db1_name}\`.* TO '${db1_user}'@'%';
-ALTER USER 'root'@'localhost' IDENTIFIED BY '12345';
-FLUSH PRIVILEGES;
-SQL
+mysqladmin -u root -p${SQL_ROOT_PASSWORD} shutdown;
 
-# Important : on passe par le socket tant que c’est local
-mysql --socket=/run/mysqld/mysqld.sock -uroot < /tmp/db1.sql
-
-# 6) Arrêt propre du bootstrap
-mysqladmin --socket=/run/mysqld/mysqld.sock -uroot -p'12345' shutdown
-
-wait "$BOOT_PID" || true
-
-# 7) Démarrage final en foreground (PID 1)
-echo "Starting MariaDB in foreground..."
-exec mysqld --user=mysql --datadir=/var/lib/mysql \
-            --pid-file=/run/mysqld/mysqld.pid \
-            --socket=/run/mysqld/mysqld.sock \
-            --bind-address=0.0.0.0 \
-            --log-error=/var/log/mysql/error.log
-
+exec mysqld_safe;
