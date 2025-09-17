@@ -33,7 +33,6 @@ services:
       - inception
     restart: always
     healthcheck:
-      # utilise le mot de passe root défini dans .env (voir section B)
       test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -p$MARIADB_ROOT_PASSWORD --silent || exit 1"]
       interval: 5s
       timeout: 3s
